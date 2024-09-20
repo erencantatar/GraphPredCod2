@@ -6,6 +6,8 @@ import numpy as np
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 
+import random 
+
 from graphbuilder import GraphBuilder
 
 class CustomGraphDataset(Dataset):
@@ -13,9 +15,13 @@ class CustomGraphDataset(Dataset):
                  same_digit=False,
                  add_noise=False, noise_intensity=0.1, N=2,
                  edge_index=None, supervision_label_val=1, indices=None):
+        
         self.mnist_dataset = mnist_dataset
+
+        self.graph_params = graph_params
+
         # self.graph_structure = graph_structure
-        self.NUM_INTERNAL_NODES = graph_params["internal_nodes"]
+        self.NUM_INTERNAL_NODES = self.graph_params["internal_nodes"]
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.same_digit = same_digit
@@ -43,80 +49,75 @@ class CustomGraphDataset(Dataset):
             if int(label) in self.numbers_list:
                 self.indices[int(label)].append(idx)
 
+        self.edge_index = edge_index
         # ------------------- Create the graph structure -------------------
-        # FOR TESTING THE METHOD of MESSAGE PASSING
-        # SENSORY_NODES = 10 # 784
-        # SENSORY_NODES = 784 # 784
-        # NUM_INTERNAL_NODES = self.NUM_INTERNAL_NODES 
-        # num_sensor_nodes    = range(SENSORY_NODES)
-        # num_internal_nodes  = range(SENSORY_NODES, SENSORY_NODES + NUM_INTERNAL_NODES)
-
-        # if self.supervised_learning:
-        #     num_all_nodes = range(SENSORY_NODES + NUM_INTERNAL_NODES + 10)
-        # else:
-        #     num_all_nodes = range(SENSORY_NODES + NUM_INTERNAL_NODES)
 
 
-
-        if edge_index is not None:
-            self.edge_index = edge_index
-            self.edge_index_tensor = self.edge_index
-        else:
-
-            from graphbuilder import graph_type_options
-
-            loader = GraphBuilder(graph_type_options, **graph_params)
-            
-            self.edge_index = loader.edge_index
+        if self.edge_index is not None:
+            self.edge_index = self.edge_index
             self.edge_index_tensor = self.edge_index
 
-            # self.NUM_INTERNAL_NODES_range = loader.INTERNAL
-            # self.NUM_INTERNAL_NODES = sum(loader.num_internal_nodes)
-        
-        if indices:
+            # REMEMBER WHAT 'indices' is for!!!!?
+            assert indices
             self.num_vertices, self.sensory_indices, self.internal_indices, self.supervision_indices = indices
+
         else:
-            self.num_vertices = loader.num_vertices
-            self.sensory_indices = loader.sensory_indices
-            self.internal_indices = loader.internal_indices
-            self.supervision_indices = loader.supervision_indices
-            
+                        
+            # Call to create initial graph
+            self.create_graph()
+
+
         print("-----Done-----")
         print(self.num_vertices)
         print(self.sensory_indices)
         print(self.internal_indices)
         print(self.supervision_indices)
         print("-----Done-----")
-            # Convert the edge list to a PyTorch tensor and transpose it to match the expected shape (2, num_edges)
-            # self.edge_index_tensor = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
 
-        # # Initialize the weights for the edges
-        # self.weights = torch.ones(self.edge_index_tensor.size(1))
-        
-        # # Convert to sparse representation
-        # self.sparse_weights = torch.sparse.FloatTensor(self.edge_index_tensor, self.weights, torch.Size([len(num_all_nodes), len(num_all_nodes)]))
 
-    # def get_edge_weight(self, i, j):
-    #     """
-    #     Retrieve the weight of the edge from node i to node j.
+    def create_graph(self):
+        from graphbuilder import graph_type_options
+        """Create the initial graph with the provided graph parameters."""
+        graph_builder = GraphBuilder(graph_type_options, **self.graph_params)
+        self.edge_index = graph_builder.edge_index
+        self.edge_index_tensor = graph_builder.edge_index
 
-    #     Parameters:
-    #     i (int): Source node index.
-    #     j (int): Target node index.
 
-    #     Returns:
-    #     float: Weight of the edge from node i to node j.
-    #     """
-    #     edge_indices = (self.edge_index_tensor[0] == i) & (self.edge_index_tensor[1] == j)
-    #     if edge_indices.any():
-    #         return self.weights[edge_indices.nonzero(as_tuple=True)[0]].item()
-    #     else:
-    #         return 0.0, False  # Return 0 if no such edge exists
+        self.num_vertices = graph_builder.num_vertices
+        self.sensory_indices = graph_builder.sensory_indices
+        self.internal_indices = graph_builder.internal_indices
+        self.supervision_indices = graph_builder.supervision_indices
+    
         
     def __len__(self):
         # TODO check this --> maybe len(self.indices)
         # return len(self.mnist_dataset)
         return sum(len(indices) for indices in self.indices.values())
+
+
+    def add_internal_node(self, num_new_nodes=1):
+        assert self.edge_index is not None, "Can't add to a non-existing graph"
+        
+        new_node_start_idx = self.num_vertices  # The index at which new nodes will start
+        for i in range(num_new_nodes):
+            new_node_idx = new_node_start_idx + i
+            self.internal_indices.append(new_node_idx)  # Add the new internal node
+
+            # Randomly select 4 existing internal nodes to connect to the new node
+            existing_nodes = random.sample(self.internal_indices, k=min(4, len(self.internal_indices)))  # Pick up to 4 nodes
+
+            for existing_node in existing_nodes:
+                # Add edge from new_node -> existing_node
+                self.edge_index = torch.cat(
+                    [self.edge_index, torch.tensor([[new_node_idx], [existing_node]], dtype=torch.long)], dim=1
+                )
+                # Add edge from existing_node -> new_node
+                self.edge_index = torch.cat(
+                    [self.edge_index, torch.tensor([[existing_node], [new_node_idx]], dtype=torch.long)], dim=1
+                )
+
+        # Update the number of vertices after adding the new nodes
+        self.num_vertices += num_new_nodes
 
 
     def __getitem__(self, idx):
