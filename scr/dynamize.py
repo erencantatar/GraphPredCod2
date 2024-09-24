@@ -39,7 +39,7 @@ class Dynamical_graph():
         
         if self.policy_nodes["add"] == "randomly":
             # Add node to the graph dataset and connect it randomly to other nodes
-            self.graph_dataset.add_internal_node(num_new_nodes=150)
+            self.graph_dataset.add_internal_node(num_new_nodes=450)
         elif self.policy_nodes["add"] == "performance_based":
             # Example: Add node based on a certain performance metric (to be implemented)
             pass
