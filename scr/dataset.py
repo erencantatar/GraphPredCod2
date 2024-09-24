@@ -66,6 +66,7 @@ class CustomGraphDataset(Dataset):
             # Call to create initial graph
             self.create_graph()
 
+        self.print_info = True 
 
         print("-----Done-----")
         print(self.num_vertices)
@@ -88,6 +89,15 @@ class CustomGraphDataset(Dataset):
         self.internal_indices = graph_builder.internal_indices
         self.supervision_indices = graph_builder.supervision_indices
     
+    def update_graph(self, new_internal_nodes=None, new_edge_index=None):
+        pass 
+
+    def info(self):
+        print("edge_index shape ", self.edge_index.shape)
+        print("num_vertices", self.num_vertices )
+        print("sensory_indices", self.sensory_indices )
+        print("internal_indices", self.internal_indices )
+        print("supervision_indices", self.supervision_indices)
         
     def __len__(self):
         # TODO check this --> maybe len(self.indices)
@@ -104,24 +114,35 @@ class CustomGraphDataset(Dataset):
             self.internal_indices.append(new_node_idx)  # Add the new internal node
 
             # Randomly select 4 existing internal nodes to connect to the new node
-            existing_nodes = random.sample(self.internal_indices, k=min(4, len(self.internal_indices)))  # Pick up to 4 nodes
+            z = 2
+            existing_nodes = random.sample(self.internal_indices, k=min(z, len(self.internal_indices)))  # Pick up to 4 nodes
 
             for existing_node in existing_nodes:
                 # Add edge from new_node -> existing_node
                 self.edge_index = torch.cat(
                     [self.edge_index, torch.tensor([[new_node_idx], [existing_node]], dtype=torch.long)], dim=1
                 )
-                # Add edge from existing_node -> new_node
-                self.edge_index = torch.cat(
-                    [self.edge_index, torch.tensor([[existing_node], [new_node_idx]], dtype=torch.long)], dim=1
-                )
+                # one_way connection
+                # # Add edge from existing_node -> new_node
+                # self.edge_index = torch.cat(
+                #     [self.edge_index, torch.tensor([[existing_node], [new_node_idx]], dtype=torch.long)], dim=1
+                # )
 
+            # print(len(self.internal_indices))
+
+        
         # Update the number of vertices after adding the new nodes
+        # self.internal_indices = 
         self.num_vertices += num_new_nodes
+        self.edge_index_tensor = self.edge_index  # Ensure edge_index_tensor is updated!
+
+        print("updated edge_index")
 
 
     def __getitem__(self, idx):
         
+        edge_index_tensor = self.edge_index_tensor
+
         # if self.same_digit:
         #     # fix idx to be the same digit
         #     selected_idx = 9
@@ -142,9 +163,10 @@ class CustomGraphDataset(Dataset):
         # Get the correct digit and its associated sample index
         digit, selected_idx = flat_indices[idx]
 
-        if idx == 0:  # Only print for the first batch to avoid repetitive output
+        if self.print_info:
+            if idx == 0:  # Only print for the first batch to avoid repetitive output
 
-            print("Selected idx: ", selected_idx)
+                print("Selected idx: ", selected_idx)
 
         # Get the image and label from the dataset using the randomly selected index
         image, label = self.mnist_dataset[selected_idx]
@@ -204,10 +226,10 @@ class CustomGraphDataset(Dataset):
             for i, supervision_idx in enumerate(self.supervision_indices):
                 values[supervision_idx] = label_vector[i]
 
-            if idx == 0:  # Only print for the first batch to avoid repetitive output
-                print("Adding label", label, label_vector)
+            if self.print_info:
+                if idx == 0:  # Only print for the first batch to avoid repetitive output
+                    print("Adding label", label, label_vector)
 
-        print("Done for idx", idx)
         # Node features: value, prediction, and error for each node
         errors = torch.zeros_like(values)
         predictions = torch.zeros_like(values)
@@ -221,6 +243,6 @@ class CustomGraphDataset(Dataset):
 
         self.edge_attr = edge_attr
 
-        return Data(x=features, edge_index=self.edge_index_tensor, y=label, edge_attr=edge_attr), clean_image.squeeze(0)
+        return Data(x=features, edge_index=edge_index_tensor, y=label, edge_attr=edge_attr), clean_image.squeeze(0)
         # return Data(x=features, edge_index=self.edge_index_tensor, y=label), clean_image.squeeze(0)
 

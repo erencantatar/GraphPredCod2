@@ -262,6 +262,8 @@ class PCGraphConv(torch.nn.Module):
         self.print_GPU = False 
 
     
+
+
     def helper_GPU(self,on=False):
         if on:
             current_memory_allocated = torch.cuda.memory_allocated()
@@ -869,7 +871,65 @@ class PCGNN(torch.nn.Module):
             }
         
         return history
-    
+
+    def update_graph(self, new_edge_index, new_internal_indices, mode="training", task=None):
+        """
+        Update the graph structure (edge_index), internal indices, and associated parameters
+        like edge weights and batch-specific indices, given the addition/removal of nodes.
+        
+        Parameters:
+        - new_edge_index (torch.Tensor): The updated edge index defining the new graph structure.
+        - new_internal_indices (list or torch.Tensor): The updated list of internal node indices.
+        - mode (str): The mode for the graph ('training' or 'testing').
+        - task (str): The task to perform (e.g., 'classification', 'generation', etc.).
+        
+        TODO = 
+        - Extend the weights 
+        - Remove the weights (Later)
+        - testing edge_index shape  
+        - ... think about it 
+        """
+
+        # Step 1: Update internal indices
+        self.pc_conv1.internal_indices_single_graph = new_internal_indices
+        self.pc_conv1.num_vertices = len(self.pc_conv1.sensory_indices_single_graph) + len(self.pc_conv1.internal_indices_single_graph)
+
+        # If in supervised mode, add the number of supervision nodes to num_vertices
+        if self.pc_conv1.supervised_labels_single_graph:
+            self.pc_conv1.num_vertices += len(self.pc_conv1.supervised_labels_single_graph)
+
+        # Step 2: Extend or shrink the weights to match the new edge index size
+        old_num_edges = self.pc_conv1.edge_index_single_graph.size(1)
+        new_num_edges = new_edge_index.size(1)
+
+        if new_num_edges > old_num_edges:
+            # Add new weights for the added edges
+            additional_weights = torch.zeros(new_num_edges - old_num_edges, device=self.pc_conv1.device)
+                    
+            self.pc_conv1.weights = torch.nn.Parameter(torch.cat([self.pc_conv1.weights, additional_weights], dim=0))
+
+        elif new_num_edges < old_num_edges:
+            raise NotImplementedError
+        #     # Truncate the weights to match the new number of edges
+        #     self.pc_conv1.weights = self.pc_conv1.weights[:new_num_edges]
+
+        # Step 3: Update the internal graph structure (edge_index)
+        self.pc_conv1.edge_index_single_graph = new_edge_index
+
+        # Step 4: Recompute normalization if necessary
+        if hasattr(self.pc_conv1, 'normalize_msg') and self.pc_conv1.normalize_msg:
+            # Recompute the normalization for the new graph
+            self.pc_conv1.norm = self.pc_conv1.compute_normalization(new_edge_index, self.pc_conv1.num_vertices, self.pc_conv1.device)
+
+        # Step 5: Reuse set_mode to recalculate batch-specific indices
+        self.pc_conv1.set_mode(mode=mode, task=task)
+
+        # Step 6: Resize tensors that depend on num_vertices (e.g., values_dummy)
+        self.pc_conv1.values_dummy = torch.nn.Parameter(torch.zeros(self.pc_conv1.batchsize * self.pc_conv1.num_vertices, device=self.pc_conv1.device), requires_grad=True)
+
+        print(f"Updated graph structure with {new_num_edges} edges and {self.pc_conv1.num_vertices} vertices.")
+
+
     def trace(self, values=False, errors=False):
         
         self.pc_conv1.trace = {

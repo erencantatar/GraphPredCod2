@@ -180,7 +180,7 @@ graph_params = {
 if graph_params["graph_type"]["name"] == "stochastic_block":
     
     # override internal nodes if doing clustering
-    graph_params["internal_nodes"] == (graph_params["graph_type"]["params"]["num_communities"] * graph_params["graph_type"]["params"]["community_size"])
+    graph_params["internal_nodes"] = (graph_params["graph_type"]["params"]["num_communities"] * graph_params["graph_type"]["params"]["community_size"])
 
 from dataset import CustomGraphDataset
 
@@ -193,7 +193,6 @@ dataset_params["NUM_INTERNAL_NODES"] = graph_params["internal_nodes"]
 
 print("Device \t\t\t:", device)
 print("SUPERVISED on/off \t", dataset_params["supervised_learning"])
-
 
 from helper.plot import plot_adj_matrix
 

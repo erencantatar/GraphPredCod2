@@ -59,10 +59,13 @@ def plot_adj_matrix(edge_index, model_dir, node_types=None):
 
         # Save the figure with node types
         plt.tight_layout()
-        fig.savefig(f'{model_dir}/node_types_grid.png')
+        if model_dir:
+            fig.savefig(f'{model_dir}/node_types_grid.png')
 
-        # Close the figure after saving
-        plt.close(fig)
+            # Close the figure after saving
+            plt.close(fig)
+        else:
+            plt.show()
     else:
         # Create figure and axis for the adjacency matrix
         fig, ax = plt.subplots(figsize=(30, 18))
@@ -78,11 +81,14 @@ def plot_adj_matrix(edge_index, model_dir, node_types=None):
 
         # Save the figure for the adjacency matrix
         plt.tight_layout()
-        fig.savefig(f'{model_dir}/adj_matrix.png')
 
-        # Close the figure after saving
-        plt.close(fig)
+        if model_dir:
+            fig.savefig(f'{model_dir}/adj_matrix.png')
 
+            # Close the figure after saving
+            plt.close(fig)
+        else:
+            plt.show()  
 
 
 def plot_connection_strength_dist(W):
